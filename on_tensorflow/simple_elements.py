@@ -1,9 +1,6 @@
 import tensorflow as tf
 import numpy as np
 from tensorflow.contrib.rnn import LSTMCell, MultiRNNCell, ResidualWrapper, DeviceWrapper
-from tensorflow.contrib.seq2seq.python.ops import helper as helper_py
-from tensorflow.contrib.seq2seq.python.ops import basic_decoder
-from attention_wrapper import AttentionWrapper
 
 def whileloop_fib_exmpl(n):
     '''
@@ -158,7 +155,10 @@ def word2vec():
 def define_seq2seq_model():
     T=1000
     N=100
+
     input = tf.placeholder(tf.float32, shape=(N, T, 512), name="input_matrix")
+    output = tf.placeholder(tf.float32, shape=(N, T, 512), name="output_matrix")
+
     seq_lengths = tf.placeholder(tf.int32, shape=(N), name="input_lengths")
 
     cell= MultiRNNCell([DeviceWrapper(ResidualWrapper(LSTMCell(num_units=512)),device='/gpu:%d' %(i+1)) for i in range(2)])
@@ -168,71 +168,29 @@ def define_seq2seq_model():
     attn_mech = tf.contrib.seq2seq.BahdanauAttention(
         num_units = 100, # depth of query mechanism
         memory = encoder_outputs, # hidden states to attend (output of RNN)
-        #memory_sequence_length= T,#tf.sequence_mask(seq_lengths, T), # masks false memories
+        #memory_sequence_length= input.shape,#tf.sequence_mask(seq_lengths, T), # masks false memories
         normalize=False, # normalize energy term
         name='BahdanauAttention')
 
     cell_out= MultiRNNCell([DeviceWrapper(ResidualWrapper(LSTMCell(num_units=512)),device='/gpu:%d' %(i+1)) for i in range(2)])
         # Attention Wrapper: adds the attention mechanism to the cell
 
-    # Attention Wrapper: adds the attention mechanism to the cell
-    attn_cell = tf.contrib.seq2seq.AttentionWrapper(
-        cell = cell,# Instance of RNNCell
+    attn_cell = tf.contrib.seq2seq.DynamicAttentionWrapper(cell = cell_out,# Instance of RNNCell
         attention_mechanism = attn_mech, # Instance of AttentionMechanism
         attention_size = 100, # Int, depth of attention (output) tensor
-        attention_history=False, # whether to store history in final output
-        name="attention_wrapper")
+        output_attention=False,
+        name='DynAttnWrap')
 
     # TrainingHelper does no sampling, only uses inputs
     helper = tf.contrib.seq2seq.TrainingHelper(
-        inputs = x, # decoder inputs
-        sequence_length = seq_len_dec, # decoder input length
+        inputs = input, # decoder inputs
+        sequence_length = input.shape, # decoder input length
         name = "decoder_training_helper")
 
-    # Decoder setup
-    decoder = tf.contrib.seq2seq.BasicDecoder(
-              cell = attn_cell,
-              helper = helper, # A Helper instance
-              initial_state = encoder_final_state, # initial state of decoder
-              output_layer = None) # instance of tf.layers.Layer, like Dense
-
+    decoder = tf.contrib.seq2seq.BasicDecoder(attn_cell, helper, encoder_final_state)
     # Perform dynamic decoding with decoder object
-    outputs, final_state = tf.contrib.seq2seq.dynamic_decode(decoder)
+    outputs, _ = tf.contrib.seq2seq.dynamic_decode(decoder)
 
-    #helper = TrainingHelper(decoder_inputs, sequence_length)
-    #
-    #
-    # decoder=tf.contrib.seq2seq.BasicDecoder(
-    #     cell=cell_out,
-    #     helper=helper,
-    #     initial_state=encoder_final_state,
-    #     attention='BahdanauAttention')
-    #
-    # decoder_outputs, final_decoder_state = dynamic_decode(decoder)
-    #
-    # decoder_logits = decoder_outputs.rnn_output
-    # decoder_sample_ids= decoder_outputs.sample_id
-    #
-    #
-
-    #
-
-    #
-    # # TrainingHelper does no sampling, only uses inputs
-    # helper = tf.contrib.seq2seq.TrainingHelper(
-    #     inputs = x, # decoder inputs
-    #     sequence_length = seq_len_dec, # decoder input length
-    #     name = "decoder_training_helper")
-    #
-    # # Decoder setup
-    # decoder = tf.contrib.seq2seq.BasicDecoder(
-    #           cell = attn_cell,
-    #           helper = helper, # A Helper instance
-    #           initial_state = encoder_state, # initial state of decoder
-    #           output_layer = None) # instance of tf.layers.Layer, like Dense
-    #
-    # Perform dynamic decoding with decoder object
-    #outputs, final_state = tf.contrib.seq2seq.dynamic_decode(decoder)
 
 def primitive():
     with tf.variable_scope('foo', reuse=True):
@@ -240,4 +198,4 @@ def primitive():
 
 
 if __name__ == '__main__':
-    tensorArray_exmpl(6)
+    define_seq2seq_model()
