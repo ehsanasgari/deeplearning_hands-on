@@ -29,23 +29,23 @@ def tensorArray_exmpl(n):
     this is building block for tf.nn.dynamic_rnn,  tf.scan, etc..
     :return:
     '''
-    # rows are sequence length which are not known (1000 sequence in the length of 100)
+    # 1000 sequence in the length of 100
     matrix = tf.placeholder(tf.int32, shape=(100, 1000), name="input_matrix")
     matrix_rows = tf.shape(matrix)[0]
-    ta = tf.TensorArray(tf.float32, size=matrix_rows)
-    ta = ta.unstack(matrix)
+    ta = tf.TensorArray(tf.int32, size=matrix_rows)
 
     init_state = (0, ta)
-    condition = lambda i, _: i < n
-    body = lambda i, ta: (i + 1, ta.write(i, ta.read(i) * 2))
-
-    tf.reset_default_graph()
+    condition = lambda i, _: i < matrix_rows
+    body = lambda i, ta: (i + 1, ta.write(i, matrix[i] * 2))
+    m, ta_final = tf.while_loop(condition, body, init_state)
+    # get the final result
+    ta_final_result = ta_final.stack()
 
     # run the graph
     with tf.Session() as sess:
-        (n, ta_final) = sess.run(tf.while_loop(condition, body, init_state),
-                                 feed_dict={matrix: tf.ones(tf.float32, shape=(100, 1000))})
-        print(ta_final.stack())
+        # print the output of ta_final_result
+        print (sess.run(ta_final_result, feed_dict={matrix: np.ones(dtype=np.int32, shape=(100,1000))}))
+
 
 
 def simple_classification():
@@ -240,4 +240,4 @@ def primitive():
 
 
 if __name__ == '__main__':
-    define_seq2seq_model()
+    tensorArray_exmpl(6)
